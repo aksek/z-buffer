@@ -21,7 +21,7 @@ padding:.word	0
 main:
 
 data_input:
-	la	$s0, coors		#TODO: ask if it's ok to have 18 syscalls for input
+	la	$s0, coors
 	li	$t2, 6			#outer loop iterator
 input_triangle:	
 	li	$t3, 3			#inner loop iterator
@@ -46,9 +46,9 @@ preprocessing:
 	li	$t8, 2			#loop iterator -- repeat for the second triangle
 	la 	$s0, coors
 	la 	$s1, pparams		#p1*x + p2*y + p3*z + p4 = 0
-vectors:
-	lw 	$t0, 0($s0)		#calculating coordinates of vectors AB (a) and AC (b)
-	lw 	$t1, 12($s0)		#using:
+vectors:				#calculating coordinates of vectors AB (a) and AC (b)
+	lw 	$t0, 0($s0)		#(sub-step for computing plane parameters)
+	lw 	$t1, 12($s0)
 	sub 	$t2, $t1, $t0		#t2 - ux
 	lw 	$t1, 24($s0)
 	sub 	$t5, $t1, $t0		#t5 - vx
@@ -190,7 +190,7 @@ read_file:
 #--------------------------------------------------------------------------------------------------
 #--------------------------------------------------------------------------------------------------
 
-fill_in_first:
+fill_in:
 	la	$t0, padding
 	lw	$s7, ($t0)
 	
@@ -204,114 +204,8 @@ fill_in_first:
 	la	$t5, coors
 	la 	$s0, pparams
 	
-	lw	$s1, 0($s0)		#p1
-	lw	$s2, 4($s0)		#p2
-	lw	$s3, 8($s0)		#p3
-	lw	$s4, 12($s0)		#p4
-	
-	la	$t1, image		#beginning of pixel data
-	lw	$t2, 0xa($t1)
-	add	$t1, $t1, $t2
-	li	$s5, 0			#row iterator, y
-row_loop_first:	
-	li	$s6, 0			#column iterator, x
-	mul	$t2, $s2, $s5		#p2 * y
-	add	$t2, $t2, $s4		#p2*y + p4
-	div	$t2, $s3		#(p2*y + p4)/p3
-	mflo	$t2			#value of z for current y and x=0
-clmn_loop_first:
-check_AB_first:
-	lw	$t0, 0($t4)		#aAB
-	lw	$t3, 24($t5)		#xC
-	mul	$t3, $t0, $t3		#0x100*a*x
-	sra	$t3, $t3, 8
-	lw	$t6, 4($t4)		#bAB
-	add	$t3, $t3, $t6		#a*x+b
-	lw	$t7, 28($t5)		#yC
-	blt	$t7, $t3, yC_less_than_AB_first
-yC_greater_than_AB_first:
-	mul	$t3, $t0, $s6		#0x100a*x
-	sra	$t3, $t3, 8
-	add	$t3, $t3, $t6		#a*x+b
-	blt	$s5, $t3, save_white
-	j	check_BC_first
-yC_less_than_AB_first:
-	mul	$t3, $t0, $s6		#0x100*a*x
-	sra	$t3, $t3, 8
-	add	$t3, $t3, $t6		#a*x+b
-	bgt	$s5, $t3, save_white
-	
-check_BC_first:
-	lw	$t0, 8($t4)		#aBC
-	lw	$t3, 0($t5)		#xA
-	mul	$t3, $t0, $t3		#0x100*a*x
-	sra	$t3, $t3, 8
-	lw	$t6, 12($t4)		#bBC
-	add	$t3, $t3, $t6		#a*x+b
-	lw	$t7, 4($t5)		#yA
-	blt	$t7, $t3, yA_less_than_BC_first
-yA_greater_than_BC_first:
-	mul	$t3, $t0, $s6		#0x100*a*x
-	sra	$t3, $t3, 8
-	add	$t3, $t3, $t6		#a*x+b
-	blt	$s5, $t3, save_white
-	j	check_CA
-yA_less_than_BC_first:
-	mul	$t3, $t0, $s6		#0x100*a*x
-	sra	$t3, $t3, 8
-	add	$t3, $t3, $t6		#a*x+b
-	bgt	$s5, $t3, save_white
-	
-check_CA_first:
-	lw	$t0, 16($t4)		#aCA
-	lw	$t3, 12($t5)		#xB
-	mul	$t3, $t0, $t3		#0x100*a*x
-	sra	$t3, $t3, 8
-	lw	$t6, 20($t4)		#bCA
-	add	$t3, $t3, $t6		#a*x+b
-	lw	$t7, 16($t5)		#yB
-	blt	$t7, $t3, yB_less_than_CA_first
-yB_greater_than_CA_first:
-	mul	$t3, $t0, $s6		#0x100*a*x
-	sra	$t3, $t3, 8
-	add	$t3, $t3, $t6		#a*x+b
-	blt	$s5, $t3, save_white
-	j	calc_and_save_pxl_first
-yB_less_than_CA_first:
-	mul	$t3, $t0, $s6		#0x100*a*x
-	sra	$t3, $t3, 8
-	add	$t3, $t3, $t6		#a*x+b
-	bgt	$s5, $t3, save_white
-
-calc_and_save_pxl_first:
-	mul	$t3, $s1, $s6		#p1 * x
-	div	$t3, $s3		#(p1*x)/p3
-	mflo	$t3
-	add	$t2, $t2, $t3
-	sb	$t2, 0($t1)
-	sb	$t2, 1($t1)
-	sb	$t2, 2($t1)
-	sub	$t2, $t2, $t3
-	j	next_pxl_first
-save_white:
-	li	$t3, 0xff
-	sb	$t3, 0($t1)
-	sb	$t3, 1($t1)
-	sb	$t3, 2($t1)
-next_pxl_first:
-	addi	$t1, $t1, 3		#address++
-	addi	$s6, $s6, 1		#inner iterator ++
-	bne	$s6, $t8, clmn_loop_first
-	
-	add	$t1, $t1, $s7		#add padding
-	addi	$s5, $s5, 1		#outer iterator ++
-	bne	$s5, $t9, row_loop_first
-	
-#--------------------------------------------------------------------------------------------------
-	
-	la	$t4, edges + 24		#2nd triangle's edges
-	la	$t5, coors + 36		#2nd triangle's coors
-	la	$s0, pparams + 16		#2nd triangle's pparams
+	li	$a3, 2
+triangle_loop:	
 	
 	lw	$s1, 0($s0)		#p1
 	lw	$s2, 4($s0)		#p2
@@ -342,13 +236,13 @@ yC_greater_than_AB:
 	mul	$t3, $t0, $s6		#0x100a*x
 	sra	$t3, $t3, 8
 	add	$t3, $t3, $t6		#a*x+b
-	blt	$s5, $t3, next_pxl
+	blt	$s5, $t3, first_object_save_white
 	j	check_BC
 yC_less_than_AB:
 	mul	$t3, $t0, $s6		#0x100*a*x
 	sra	$t3, $t3, 8
 	add	$t3, $t3, $t6		#a*x+b
-	bgt	$s5, $t3, next_pxl
+	bgt	$s5, $t3, first_object_save_white
 	
 check_BC:
 	lw	$t0, 8($t4)		#aBC
@@ -363,13 +257,13 @@ yA_greater_than_BC:
 	mul	$t3, $t0, $s6		#0x100*a*x
 	sra	$t3, $t3, 8
 	add	$t3, $t3, $t6		#a*x+b
-	blt	$s5, $t3, next_pxl
+	blt	$s5, $t3, first_object_save_white
 	j	check_CA
 yA_less_than_BC:
 	mul	$t3, $t0, $s6		#0x100*a*x
 	sra	$t3, $t3, 8
 	add	$t3, $t3, $t6		#a*x+b
-	bgt	$s5, $t3, next_pxl
+	bgt	$s5, $t3, first_object_save_white
 	
 check_CA:
 	lw	$t0, 16($t4)		#aCA
@@ -384,29 +278,30 @@ yB_greater_than_CA:
 	mul	$t3, $t0, $s6		#0x100*a*x
 	sra	$t3, $t3, 8
 	add	$t3, $t3, $t6		#a*x+b
-	blt	$s5, $t3, next_pxl
+	blt	$s5, $t3, first_object_save_white
 	j	calc_and_save_pxl
 yB_less_than_CA:
 	mul	$t3, $t0, $s6		#0x100*a*x
 	sra	$t3, $t3, 8
 	add	$t3, $t3, $t6		#a*x+b
-	bgt	$s5, $t3, next_pxl
+	bgt	$s5, $t3, first_object_save_white
 
 calc_and_save_pxl:
 	mul	$t3, $s1, $s6		#p1 * x
 	div	$t3, $s3		#(p1*x)/p3
 	mflo	$t3
 	add	$t2, $t2, $t3
-	
-	#check if the new object is behind the other
-	lb	$t7, ($t1)
-	ble	$t7, $t2, sub_x
-	
 	sb	$t2, 0($t1)
 	sb	$t2, 1($t1)
 	sb	$t2, 2($t1)
-sub_x:
 	sub	$t2, $t2, $t3
+	j	next_pxl
+first_object_save_white:
+	bne	$a3, 2, next_pxl
+	li	$t3, 0xff
+	sb	$t3, 0($t1)
+	sb	$t3, 1($t1)
+	sb	$t3, 2($t1)
 next_pxl:
 	addi	$t1, $t1, 3		#address++
 	addi	$s6, $s6, 1		#inner iterator ++
@@ -415,6 +310,13 @@ next_pxl:
 	add	$t1, $t1, $s7		#add padding
 	addi	$s5, $s5, 1		#outer iterator ++
 	bne	$s5, $t9, row_loop
+	
+	la	$t4, edges + 24		#2nd triangle's edges
+	la	$t5, coors + 36		#2nd triangle's coors
+	la	$s0, pparams + 16		#2nd triangle's pparams
+	
+	addi	$a3, $a3, -1
+	bnez	$a3, triangle_loop
 	
 #--------------------------------------------------------------------------------------------------
 #--------------------------------------------------------------------------------------------------
