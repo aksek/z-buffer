@@ -291,9 +291,14 @@ calc_and_save_pxl:
 	div	$t3, $s3		#(p1*x)/p3
 	mflo	$t3
 	add	$t2, $t2, $t3
+	
+	#check if the new object is behind the other
+	lb	$t7, ($t1)
+	ble	$t7, $t2, sub_x
 	sb	$t2, 0($t1)
 	sb	$t2, 1($t1)
 	sb	$t2, 2($t1)
+sub_x:
 	sub	$t2, $t2, $t3
 	j	next_pxl
 first_object_save_white:
