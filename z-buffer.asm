@@ -1,7 +1,8 @@
-	.eqv 	MAX_FSIZE 	320000 
+	.eqv 	MAX_FSIZE 	640000 
 	.data
 	
-fout: 	.asciiz	"zbuffer.bmp"		#output filename
+fout: 	.asciiz	"zbuffer.bmp"		#input and output filename
+fout2:	.asciiz "colored_triangles"	#second output filename
 prompt: .asciiz	"Enter point coordinates (z coordinate should not exceed 256): \n"
 
 	.align	2
@@ -9,8 +10,10 @@ coors: 	.space	72			#traingle vertex coordinates
 pparams:.space	32			#plane parameters
 edges: 	.space	48			#edge parameters, AB(a, b), BC, CA x2
 
-skip:	.space	2
+skip1:	.space	2
 image:	.space	MAX_FSIZE
+skip2:	.space	2
+colored:.space	MAX_FSIZE
 width:	.word	0
 height:	.word	0
 padding:.word	0
@@ -204,6 +207,39 @@ fill_in:
 	la	$t5, coors
 	la 	$s0, pparams
 	
+	
+clear_bitmap:
+	la	$t1, image		#beginning of pixel data
+	lw	$t2, 0xa($t1)
+	add	$t1, $t1, $t2
+	
+	la	$t3, colored
+	add	$t3, $t3, $t2
+	
+	li	$s5, 0			#row iterator, y
+outer_loop:	
+	li	$s6, 0			#column iterator, x
+inner_loop:
+	li	$t2, 0xff
+	sb	$t2, 0($t1)
+	sb	$t2, 1($t1)
+	sb	$t2, 2($t1)
+	
+	sb	$t2, 0($t3)
+	sb	$t2, 1($t3)
+	sb	$t2, 2($t3)
+	
+	addi	$t1, $t1, 3		#address++
+	addi	$t3, $t3, 3
+	addi	$s6, $s6, 1		#inner iterator ++
+	blt	$s6, $t8, inner_loop
+	
+	add	$t1, $t1, $s7		#add padding
+	addi	$s5, $s5, 1		#outer iterator ++
+	blt	$s5, $t9, outer_loop
+	
+	#-------------------------------------------------------------------
+	
 	li	$a3, 2
 triangle_loop:	
 	
@@ -215,6 +251,10 @@ triangle_loop:
 	la	$t1, image		#beginning of pixel data
 	lw	$t2, 0xa($t1)
 	add	$t1, $t1, $t2
+	
+	la	$ra, colored		#jal instruction is not used in the program, $ra can be used
+	add	$ra, $ra, $t2
+	
 	li	$s5, 0			#row iterator, y
 row_loop:	
 	li	$s6, 0			#column iterator, x
@@ -236,13 +276,13 @@ yC_greater_than_AB:
 	mul	$t3, $t0, $s6		#0x100a*x
 	sra	$t3, $t3, 8
 	add	$t3, $t3, $t6		#a*x+b
-	blt	$s5, $t3, first_object_save_white
+	blt	$s5, $t3, next_pxl
 	j	check_BC
 yC_less_than_AB:
 	mul	$t3, $t0, $s6		#0x100*a*x
 	sra	$t3, $t3, 8
 	add	$t3, $t3, $t6		#a*x+b
-	bgt	$s5, $t3, first_object_save_white
+	bgt	$s5, $t3, next_pxl
 	
 check_BC:
 	lw	$t0, 8($t4)		#aBC
@@ -257,13 +297,13 @@ yA_greater_than_BC:
 	mul	$t3, $t0, $s6		#0x100*a*x
 	sra	$t3, $t3, 8
 	add	$t3, $t3, $t6		#a*x+b
-	blt	$s5, $t3, first_object_save_white
+	blt	$s5, $t3, next_pxl
 	j	check_CA
 yA_less_than_BC:
 	mul	$t3, $t0, $s6		#0x100*a*x
 	sra	$t3, $t3, 8
 	add	$t3, $t3, $t6		#a*x+b
-	bgt	$s5, $t3, first_object_save_white
+	bgt	$s5, $t3, next_pxl
 	
 check_CA:
 	lw	$t0, 16($t4)		#aCA
@@ -278,13 +318,13 @@ yB_greater_than_CA:
 	mul	$t3, $t0, $s6		#0x100*a*x
 	sra	$t3, $t3, 8
 	add	$t3, $t3, $t6		#a*x+b
-	blt	$s5, $t3, first_object_save_white
+	blt	$s5, $t3, next_pxl
 	j	calc_and_save_pxl
 yB_less_than_CA:
 	mul	$t3, $t0, $s6		#0x100*a*x
 	sra	$t3, $t3, 8
 	add	$t3, $t3, $t6		#a*x+b
-	bgt	$s5, $t3, first_object_save_white
+	bgt	$s5, $t3, next_pxl
 
 calc_and_save_pxl:
 	mul	$t3, $s1, $s6		#p1 * x
@@ -294,27 +334,35 @@ calc_and_save_pxl:
 	
 	#check if the new object is behind the other
 	lb	$t7, ($t1)
-	ble	$t7, $t2, sub_x
+	bgeu	$t2, $t7, sub_x
+
 	sb	$t2, 0($t1)
 	sb	$t2, 1($t1)
 	sb	$t2, 2($t1)
+	
+	beq	$a3, 2, color_second
+color_first:
+	li	$t7, 0xa0
+	sb	$t7, 0($ra)
+	sb	$0, 1($ra)
+	sb	$0, 2($ra)
+	j	sub_x
+color_second:
+	li	$t7, 0xe0
+	sb	$0, 0($ra)
+	sb	$t7, 1($ra)
+	sb	$0, 2($ra)
 sub_x:
 	sub	$t2, $t2, $t3
-	j	next_pxl
-first_object_save_white:
-	bne	$a3, 2, next_pxl
-	li	$t3, 0xff
-	sb	$t3, 0($t1)
-	sb	$t3, 1($t1)
-	sb	$t3, 2($t1)
 next_pxl:
 	addi	$t1, $t1, 3		#address++
+	addi	$ra, $ra, 3
 	addi	$s6, $s6, 1		#inner iterator ++
-	bne	$s6, $t8, clmn_loop
+	blt	$s6, $t8, clmn_loop
 	
 	add	$t1, $t1, $s7		#add padding
 	addi	$s5, $s5, 1		#outer iterator ++
-	bne	$s5, $t9, row_loop
+	blt	$s5, $t9, row_loop
 	
 	la	$t4, edges + 24		#2nd triangle's edges
 	la	$t5, coors + 36		#2nd triangle's coors
@@ -325,8 +373,20 @@ next_pxl:
 	
 #--------------------------------------------------------------------------------------------------
 #--------------------------------------------------------------------------------------------------
+copy_header:
+	la	$s1, image
+	la	$s2, colored
+	lw	$t0, 0xa($s1)
+copy_loop:
+	lh	$t3, ($s1)
+	sh	$t3, ($s2)
+	addi	$s1, $s1, 2
+	addi	$s2, $s2, 2
 	
-save_file:	
+	addi	$t0, $t0, -2
+	bnez	$t0, copy_loop
+	
+save_file_1:	
 #open file
 	li	$v0, 13
 	la	$a0, fout
@@ -338,6 +398,25 @@ save_file:
 	li	$v0, 15
 	move	$a0, $s0		#file descriptor
 	la	$a1, image		#buffer address
+	li	$a2, MAX_FSIZE		#buffer length 
+	syscall				#read
+#close file
+	li	$v0, 16
+	move	$a0, $s0		# file descriptor
+	syscall				# close file
+	
+save_file_2:	
+#open file
+	li	$v0, 13
+	la	$a0, fout2
+	li	$a1, 1			#flags (1 - write to file)
+	li	$a2, 0			#mode is ignored
+	syscall				#open
+	move 	$s0, $v0		#save the file descriptor
+#write to file
+	li	$v0, 15
+	move	$a0, $s0		#file descriptor
+	la	$a1, colored		#buffer address
 	li	$a2, MAX_FSIZE		#buffer length 
 	syscall				#read
 #close file
